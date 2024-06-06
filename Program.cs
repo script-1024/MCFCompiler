@@ -4,14 +4,17 @@ using System.Diagnostics.CodeAnalysis;
 namespace MCFCompiler;
 public class Program
 {
+    public static bool SaveLog = false;
     public static bool IsDebugMode = false;
     public static bool IsReadFileMode = false;
+    public static string ProgramStartPath = Environment.CurrentDirectory;
     public const string Minecraft_Tags_Functions = "minecraft\\tags\\functions\\";
 
     public static void PrintLog(string msg)
     {
         if (!IsDebugMode) return;
         Console.WriteLine($"[Debug] {msg}");
+        if (SaveLog) File.AppendAllText(ProgramStartPath, $"[Debug] {msg}");
     }
 
     public static void PrintAndPause(string msg)
@@ -44,6 +47,8 @@ public class Program
         int opendFiles = 0;
         foreach (string arg in args)
         {
+            if (SaveLog) File.WriteAllText(ProgramStartPath, "");
+
             if (IsReadFileMode)
             {
                 if (File.Exists(arg))
@@ -57,11 +62,13 @@ public class Program
             }
 
             if (arg == "-h" || arg == "--help") ShowHelp();
+            if (arg == "-l" || arg == "--log") SaveLog = true;
             if (arg == "-d" || arg == "--debug") IsDebugMode = true;
             if (arg == "-f" || arg == "--file") IsReadFileMode = true;
         }
 
         if (opendFiles == 0) PrintAndPause("未指定任何文件");
+        else if (IsDebugMode) PrintLog("操作已完成");
     }
 
     static void ShowHelp()
@@ -70,6 +77,7 @@ public class Program
         [
             "使用说明：",
             "-h | --help 显示此说明",
+            "-l | --log 结束运行后保存日志",
             "-d | --debug 进入除错模式",
             "-f | --file 将后续所有参数视为文件名，任意文件无法开启都将导致整个程序结束运行"
         ];
@@ -84,16 +92,16 @@ public class Program
 
         // 取得指定文件所在的目录信息
         // 由于先前已通过 File.Exist(fileName) 检查，此处不可能返回 null
-        string rootDirectory = fileName.GetFileInfo().Directory!.FullName + '\\';
-        string currentNamespace = string.Empty, datapackRootPath = string.Empty;
+        var fileParentDirectory = fileName.GetFileInfo().Directory!.FullName + '\\';
+        string currentNamespace = string.Empty;
+        string datapackRootPath = string.Empty;
+        string namespaceHomePath = string.Empty;
 
-        Directory.SetCurrentDirectory(rootDirectory);
-        PrintLog($"当前目录: {rootDirectory}");
+        Directory.SetCurrentDirectory(fileParentDirectory);
+        PrintLog($"当前目录: {fileParentDirectory}");
 
         foreach (var line in content)
         {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-
             // 由 '#>' 开头表示编译器指令
             if (line.StartsWith("#> "))
             {
@@ -102,14 +110,14 @@ public class Program
                 switch (action)
                 {
                     case "root":
-                        Directory.SetCurrentDirectory(rootDirectory);
+                        Directory.SetCurrentDirectory(datapackRootPath);
                         PrintLog("切换至根目录");
                         break;
 
                     case "home":
-                        if (!string.IsNullOrWhiteSpace(datapackRootPath))
+                        if (!string.IsNullOrWhiteSpace(namespaceHomePath))
                         {
-                            Directory.SetCurrentDirectory(datapackRootPath);
+                            Directory.SetCurrentDirectory(namespaceHomePath);
                             PrintLog("切换至数据包主目录");
                         }
                         else PrintLog($"未指定数据包主目录");
@@ -120,13 +128,13 @@ public class Program
                             if (cmd.TryGetValue(1, out var path))
                             {
                                 path = path!.Replace('/', '\\');
-                                datapackRootPath = path.GetDirectoryInfo().FullName;
-                                PrintLog($"已指定数据包主目录: {datapackRootPath}");
+                                namespaceHomePath = path.GetDirectoryInfo().FullName;
+                                PrintLog($"已指定数据包主目录: {namespaceHomePath}");
                             }
                             else
                             {
-                                datapackRootPath = Directory.GetCurrentDirectory().GetDirectoryInfo().FullName;
-                                PrintLog($"已指定当前目录为数据包主目录: {datapackRootPath}");
+                                namespaceHomePath = Directory.GetCurrentDirectory().GetDirectoryInfo().FullName;
+                                PrintLog($"已指定当前目录为数据包主目录: {namespaceHomePath}");
                             }
                             break;
                         }
@@ -137,7 +145,7 @@ public class Program
                             {
                                 currentNamespace = namesp!;
                                 cmd.TryGetValue(2, out var pack_format);
-                                cmd.TryGetValue(3, out var description);
+                                string description = (cmd.Length >= 3) ? string.Join(" ", cmd[3..]) : string.Empty;
                                 InitializeDatapack(pack_format, description);
                                 PrintLog($"在当前目录以命名空间 \"{namesp}\" 初始化数据包");
                             }
@@ -186,11 +194,13 @@ public class Program
 
                     case "open":
                         {
-                            if (cmd.TryGetValue(1, out var file))
+                            if (cmd.TryGetValue(1, out var filepath))
                             {
-                                file = file!.Replace('/', '\\');
-                                openedFiles.Push(file);
-                                PrintLog($"开启文件: {file}");
+                                filepath = filepath!.Replace('/', '\\');
+                                var fileInfo = filepath.GetFileInfo();
+                                if (!fileInfo.Exists) File.WriteAllText(filepath, "");
+                                openedFiles.Push(fileInfo.FullName);
+                                PrintLog($"开启文件: {fileInfo.FullName}");
                             }
                             else PrintLog($"命令 \"{action}\" 缺少必要参数");
                         }
@@ -240,6 +250,8 @@ public class Program
             if (!openedFiles.TryPeek(out var path)) return;
             if (string.IsNullOrWhiteSpace(path)) return;
             if (!File.Exists(path)) return;
+            line.TrimEnd(['\t', '\r', '\n']);
+            line += Environment.NewLine;
             File.AppendAllText(path, line);
         }
 
@@ -267,13 +279,15 @@ public class Program
             Directory.GetCurrentDirectory().GetDirectoryInfo().CreateSubdirectory(Minecraft_Tags_Functions);
             File.WriteAllText(
                 $"{Minecraft_Tags_Functions}tick.json",
-                $"{{ \"values\": [ \"{currentNamespace}:tick\"] }}");
+                $"{{ \"values\": [ \"{currentNamespace}:tick\" ] }}");
             File.WriteAllText(
                 $"{Minecraft_Tags_Functions}load.json",
-                $"{{ \"values\": [ \"{currentNamespace}:load\"] }}");
+                $"{{ \"values\": [ \"{currentNamespace}:load\" ] }}");
             Directory.SetCurrentDirectory(datapackRootPath);
             Directory.GetCurrentDirectory().GetDirectoryInfo().CreateSubdirectory($"{currentNamespace}\\functions");
-            Directory.SetCurrentDirectory($"{currentNamespace}\\functions");
+            Directory.SetCurrentDirectory(currentNamespace);
+            namespaceHomePath = Directory.GetCurrentDirectory().GetDirectoryInfo().FullName;
+            Directory.SetCurrentDirectory("functions");
         }
     }
 }
