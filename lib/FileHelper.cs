@@ -22,8 +22,18 @@ public static class FileHelper
 
         foreach (FileInfo file in dirInfo.GetFiles())
         {
-            file.Delete();
-            Program.PrintLog($"删除文件: {file.Name}");
+            if (file.Exists)
+            {
+                Program.PrintLog($"删除文件: {file.Name}");
+                try
+                {
+                    file.Delete();
+                }
+                catch
+                {
+                    Program.PrintLog($"删除指定文件 \"{file.Name}\" 时发生错误");
+                }
+            }
         }
 
         foreach (DirectoryInfo subDir in dirInfo.GetDirectories())
@@ -31,6 +41,13 @@ public static class FileHelper
             RemoveDirectoryAndAllFiles(subDir, name + '\\');
         }
 
-        dirInfo.Delete();
+        try
+        {
+            dirInfo.Delete();
+        }
+        catch
+        {
+            Program.PrintLog($"删除指定目录 \"{dirInfo.Name}\" 时发生错误");
+        }
     }
 }
