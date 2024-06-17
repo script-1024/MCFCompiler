@@ -1,4 +1,4 @@
-﻿using MCFCompiler.lib;
+using MCFCompiler.lib;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Text.RegularExpressions;
@@ -359,7 +359,7 @@ public partial class Program
 
         if (NeedCompress)
         {
-            string zipPath = @$"{OutputPath}\{datapackName}.zip";
+            string zipPath = @$"{OutputPath.TrimEnd('\\')}\{datapackName}.zip";
             PrintLog("开始压缩数据包");
             if (File.Exists(zipPath)) File.Delete(zipPath); // 移除已存在的同名文件
             ZipFile.CreateFromDirectory(zipPath[..^4], $"{zipPath}");

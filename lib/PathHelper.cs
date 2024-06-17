@@ -68,6 +68,7 @@ public static class PathHelper
             {
                 var info = path.GetFileInfo();
                 path = info.FullName;
+                path.TrimEnd('\\');
                 if (allowedAccessToExt || IsSubDirectoryOrFile(DatapackRootPath, path)) return info.Exists;
                 else return null; // 不可访问至数据包根目录之外
             }
@@ -75,6 +76,7 @@ public static class PathHelper
             {
                 var info = path.GetDirectoryInfo();
                 path = info.FullName;
+                path.TrimEnd('\\');
                 if (allowedAccessToExt || IsSubDirectoryOrFile(DatapackRootPath, path)) return info.Exists;
                 else return null; // 不可访问至数据包根目录之外
             }
